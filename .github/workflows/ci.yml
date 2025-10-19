@@ -27,11 +27,17 @@ jobs:
           pip install -r requirements.txt
           pip install mypy types-requests
 
-      - name: Run tests
+      - name: Run tests (headless Xvfb for Qt)
         env:
           PYTHONPATH: ${{ github.workspace }}
+          # Use the offscreen platform plugin so Qt doesn't require a display
+          QT_QPA_PLATFORM: offscreen
+          # Disable Qt WebEngine sandbox in CI runners which can cause crashes
+          QTWEBENGINE_DISABLE_SANDBOX: "1"
         run: |
-          pytest -q
+          # Run tests under Xvfb so GUI libraries (Qt) have a display
+          # Use xvfb-run which is available on ubuntu-latest images
+          xvfb-run -s "-screen 0 1920x1080x24" pytest -q
 
       - name: Run mypy
         run: |

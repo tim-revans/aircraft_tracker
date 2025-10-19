@@ -30,6 +30,18 @@ You can change these in `main.py` or pass environment variables (TBD).
 - If the OpenSky API is unreachable, check your network and try again.
 - If geolocation fails, the app falls back to a default location (TBD).
 
+## Continuous Integration (CI)
+
+When running tests in headless CI (GitHub Actions on Ubuntu) the Qt GUI libraries
+and Qt WebEngine can crash if no display is available or the WebEngine sandbox
+is enabled. The CI workflow sets the following to avoid aborts during tests:
+
+- Run pytest under Xvfb (provides a virtual display)
+- Set `QT_QPA_PLATFORM=offscreen`
+- Set `QTWEBENGINE_DISABLE_SANDBOX=1`
+
+These are applied in `.github/workflows/ci.yml`.
+
 ## License
 
 MIT
