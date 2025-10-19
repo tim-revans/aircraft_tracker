@@ -1,0 +1,8 @@
+PyQt5
+PyQtWebEngine
+folium
+requests
+geocoder
+geopy
+Pillow
+# threading and logging are in the standard library
