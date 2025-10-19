@@ -14,6 +14,27 @@ def ensure_qapp():
 
 @patch('services.data_fetcher.fetch_states')
 @patch('utils.geo_utils.get_current_location')
+def test_main_window_with_webengine_disabled(mock_get_loc: MagicMock, mock_fetch_states: MagicMock):
+    """Ensure MainWindow works when WebEngine is disabled via env var."""
+    import os
+    os.environ['AIRCRAFT_TRACKER_DISABLE_WEBENGINE'] = '1'
+
+    ensure_qapp()
+
+    mock_get_loc.return_value = (48.0, 2.0)
+    mock_fetch_states.return_value = {
+        'time': 0,
+        'states': [["abc123", "CALL123", "Country", None, None, 2.1, 48.1, None, False, None, None, None, None, None, None, None, None]]
+    }
+
+    win = MainWindow()
+    assert "Nearest aircraft info will appear here." not in win.info_label.text()
+    # Clean up env var for other tests
+    del os.environ['AIRCRAFT_TRACKER_DISABLE_WEBENGINE']
+
+
+@patch('services.data_fetcher.fetch_states')
+@patch('utils.geo_utils.get_current_location')
 def test_main_window_calls_refresh_on_init(mock_get_loc: MagicMock, mock_fetch_states: MagicMock):
     """This test asserts that MainWindow.refresh() is executed during __init__
     so the info label is populated immediately. It patches network/geolocation

@@ -51,24 +51,19 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout()
         central.setLayout(layout)
 
-        # Map view: try to create a QWebEngineView, but fall back to a
-        # placeholder widget if creation fails (common in headless CI).
-        if QWebEngineView is not None:
-            try:
-                self.web_view = QWebEngineView()
-            except Exception:
-                logger = logging.getLogger(__name__)
-                logger.exception("QWebEngineView creation failed; using placeholder")
-                self.web_view = QWidget()
-                # Provide a no-op load method so code calling `.load()` is safe
-                self.web_view.load = lambda *a, **k: None  # type: ignore
-        else:
-            logger = logging.getLogger(__name__)
-            logger.info("PyQt5.QtWebEngineWidgets.QWebEngineView not available; using placeholder")
-            self.web_view = QWidget()
-            self.web_view.load = lambda *a, **k: None  # type: ignore
+        # Map view: create a lightweight placeholder now (safe in headless
+        # environments). We will lazily create a real QWebEngineView only when
+        # rendering a map inside `refresh()`; that creation is wrapped in
+        # try/except to avoid native crashes in restricted environments.
+        self.web_view = QWidget()
+        # Provide a no-op load method so code calling `.load()` is safe
+        self.web_view.load = lambda *a, **k: None  # type: ignore
 
-        layout.addWidget(self.web_view, 3)
+        # Keep a reference to the main layout so we can replace the placeholder
+        # with a real web view later if creation succeeds.
+        self._main_layout = layout
+        self._web_view_index = self._main_layout.count()
+        self._main_layout.addWidget(self.web_view, 3)
 
         # Side panel
         side = QWidget()
@@ -135,12 +130,33 @@ class MainWindow(QMainWindow):
             info = "No aircraft detected nearby."
         self.info_label.setText(info)
 
-        # Render map and load into web view
+        # Render map and load into web view. We lazily construct QWebEngineView
+        # here if available; creation can fail in headless CI so wrap in
+        # try/except and keep the placeholder as a safe fallback.
         try:
             m = create_map(center_lat, center_lon, zoom_start=8)
             m = add_aircraft_markers(m, aircraft, highlight_radius_km=50)
             out_path = os.path.join(tempfile.gettempdir(), "aircraft_map.html")
             m.save(out_path)
-            self.web_view.load(QUrl.fromLocalFile(out_path))
+
+            # If a real QWebEngineView is available and not yet created, try
+            # to create it and replace the placeholder in the layout.
+            if QWebEngineView is not None and not isinstance(self.web_view, QWebEngineView):
+                try:
+                    real_view = QWebEngineView()
+                    # Replace placeholder with real web view in the layout
+                    self._main_layout.removeWidget(self.web_view)
+                    self.web_view.deleteLater()
+                    self.web_view = real_view
+                    self._main_layout.insertWidget(self._web_view_index, self.web_view, 3)
+                except Exception:
+                    logger.exception("Failed to create QWebEngineView; continuing with placeholder")
+
+            # Load the local file into whichever web_view we have (real or placeholder)
+            try:
+                self.web_view.load(QUrl.fromLocalFile(out_path))
+            except Exception:
+                # If placeholder or load fails, ignore — label update matters most for tests
+                logger.exception("Failed to load map into web view")
         except Exception:
-            logger.exception("Failed to render or load map")
+            logger.exception("Failed to render map")
