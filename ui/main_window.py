@@ -8,11 +8,31 @@ an internal QTimer for periodic updates.
 
 from PyQt5.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel, QHBoxLayout
 from PyQt5.QtCore import QTimer, QUrl
-from PyQt5.QtWebEngineWidgets import QWebEngineView
+import os
+
+# Avoid importing or creating Qt WebEngine in CI or when explicitly
+# disabled via AIRCRAFT_TRACKER_DISABLE_WEBENGINE. Importing the
+# WebEngine can initialize native processes that abort in headless
+# or sandboxed environments (common on CI runners). When disabled we
+# provide a lightweight placeholder with a no-op `load()` method so
+# tests that only assert UI logic (like labels) can run safely.
+_disable_webengine = bool(
+    os.environ.get("GITHUB_ACTIONS")
+    or os.environ.get("CI")
+    or os.environ.get("AIRCRAFT_TRACKER_DISABLE_WEBENGINE")
+)
+
+if not _disable_webengine:
+    try:
+        from PyQt5.QtWebEngineWidgets import QWebEngineView  # type: ignore
+    except Exception:
+        # Importing WebEngine failed; fall back to placeholder
+        QWebEngineView = None
+else:
+    QWebEngineView = None
 
 import logging
 import tempfile
-import os
 
 from services.data_fetcher import fetch_states
 from services.map_renderer import create_map, add_aircraft_markers
@@ -31,8 +51,23 @@ class MainWindow(QMainWindow):
         layout = QHBoxLayout()
         central.setLayout(layout)
 
-        # Map view
-        self.web_view = QWebEngineView()
+        # Map view: try to create a QWebEngineView, but fall back to a
+        # placeholder widget if creation fails (common in headless CI).
+        if QWebEngineView is not None:
+            try:
+                self.web_view = QWebEngineView()
+            except Exception:
+                logger = logging.getLogger(__name__)
+                logger.exception("QWebEngineView creation failed; using placeholder")
+                self.web_view = QWidget()
+                # Provide a no-op load method so code calling `.load()` is safe
+                self.web_view.load = lambda *a, **k: None  # type: ignore
+        else:
+            logger = logging.getLogger(__name__)
+            logger.info("PyQt5.QtWebEngineWidgets.QWebEngineView not available; using placeholder")
+            self.web_view = QWidget()
+            self.web_view.load = lambda *a, **k: None  # type: ignore
+
         layout.addWidget(self.web_view, 3)
 
         # Side panel

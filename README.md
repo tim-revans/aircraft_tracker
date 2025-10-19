@@ -42,6 +42,11 @@ is enabled. The CI workflow sets the following to avoid aborts during tests:
 
 These are applied in `.github/workflows/ci.yml`.
 
+You can also force-disable WebEngine when running tests locally by setting
+`AIRCRAFT_TRACKER_DISABLE_WEBENGINE=1`. This makes the application create a
+lightweight placeholder for the map view which avoids starting Qt WebEngine
+processes (useful for headless/local testing).
+
 ## License
 
 MIT
